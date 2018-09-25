@@ -198,12 +198,13 @@ function get_layer(layer)
 	    cnn = layer
 	end
     end
-end 
+end
 protos.rnn:apply(get_layer)
 
 -- make a bunch of clones after flattening, as that reallocates memory
 -- not really sure how this part works
 clones = {}
+-- clones.rnn = model_utils.clone_many_times(protos.rnn, opt.seq_length, not protos.rnn.parameters)
 for name,proto in pairs(protos) do
     print('cloning ' .. name)
     clones[name] = model_utils.clone_many_times(proto, opt.seq_length, not proto.parameters)
@@ -212,9 +213,19 @@ end
 -- for easy switch between using words/chars (or both)
 function get_input(x, x_char, t, prev_states)
     local u = {}
-    if opt.use_chars == 1 then table.insert(u, x_char[{{},t}]) end
+    if opt.use_chars == 1 then
+        -- table.insert(u, x_char[{{},t}]) 
+        local subX = x_char[{{}, t}]
+        -- print('subX')
+        -- print(subX)
+        table.insert(u, subX)
+    end
     if opt.use_words == 1 then table.insert(u, x[{{},t}]) end
-    for i = 1, #prev_states do table.insert(u, prev_states[i]) end
+    for i = 1, #prev_states do
+        -- print('prev_states[i]:size()')
+        -- print(prev_states[i]:size())
+        table.insert(u, prev_states[i])
+    end
     return u
 end
 
@@ -236,22 +247,24 @@ function eval_split(split_idx, max_batches)
 	for i = 1,n do -- iterate over batches in the split
 	    -- fetch a batch
 	    local x, y, x_char = loader:next_batch(split_idx)
+
 	    if opt.gpuid >= 0 then -- ship the input arrays to GPU
-		-- have to convert to float because integers can't be cuda()'d
-		x = x:float():cuda()
-		y = y:float():cuda()
-		x_char = x_char:float():cuda()
+    		-- have to convert to float because integers can't be cuda()'d
+    		x = x:float():cuda()
+    		y = y:float():cuda()
+    		x_char = x_char:float():cuda()
 	    end
+
 	    -- forward pass
 	    for t=1,opt.seq_length do
 		clones.rnn[t]:evaluate() -- for dropout proper functioning
 		local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
 		rnn_state[t] = {}
 		for i=1,#init_state do 
-                    table.insert(rnn_state[t], lst[i])
-                end
+            table.insert(rnn_state[t], lst[i])
+        end
 		prediction = lst[#lst]
-                loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
+        loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
 	    end
 	    -- carry over lstm state
 	    rnn_state[0] = rnn_state[#rnn_state]
@@ -279,8 +292,9 @@ function eval_split(split_idx, max_batches)
             token_perp[y[1][t]][2] = token_perp[y[1][t]][2] + tok_perp
 	end
 	loss = loss / x:size(2)
-    end    
-    local perp = torch.exp(loss)    
+    end
+    -- local perp = torch.exp(loss)
+    local perp = loss
     return perp, token_perp
 end
 
@@ -296,11 +310,12 @@ function feval(x)
     end
     ------------------ get minibatch -------------------
     local x, y, x_char = loader:next_batch(1) --from train
+
     if opt.gpuid >= 0 then -- ship the input arrays to GPU
         -- have to convert to float because integers can't be cuda()'d
         x = x:float():cuda()
         y = y:float():cuda()
-	x_char = x_char:float():cuda()
+        x_char = x_char:float():cuda()
     end
     ------------------- forward pass -------------------
     local rnn_state = {[0] = init_state_global}
@@ -308,11 +323,18 @@ function feval(x)
     local loss = 0
     for t=1,opt.seq_length do
         clones.rnn[t]:training() -- make sure we are in correct mode (this is cheap, sets flag)        
-        local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
+        local rnnInput = get_input(x, x_char, t, rnn_state[t-1])
+        -- print('rnnInput')
+        -- print(rnnInput)
+        local lst = clones.rnn[t]:forward(rnnInput)
         rnn_state[t] = {}
         for i=1,#init_state do 
             table.insert(rnn_state[t], lst[i]) 
         end -- extract the state, without output
+        -- print('lst[#lst]')
+        -- print(lst[#lst]:size())
+        -- print('y[{{}, t}]')
+        -- print(y[{{}, t}]:size())
         predictions[t] = lst[#lst] -- last element is the prediction
         loss = loss + clones.criterion[t]:forward(predictions[t], y[{{}, t}])
     end
@@ -324,7 +346,7 @@ function feval(x)
         -- backprop through loss, and softmax/linear
         local doutput_t = clones.criterion[t]:backward(predictions[t], y[{{}, t}])
         table.insert(drnn_state[t], doutput_t)
-	table.insert(rnn_state[t-1], drnn_state[t])
+	    table.insert(rnn_state[t-1], drnn_state[t])
         local dlst = clones.rnn[t]:backward(get_input(x, x_char, t, rnn_state[t-1]), drnn_state[t])
         drnn_state[t-1] = {}
 	local tmp = opt.use_words + opt.use_chars -- not the safest way but quick
@@ -397,7 +419,7 @@ for i = 1, iterations do
         checkpoint.i = i
         checkpoint.epoch = epoch
         checkpoint.vocab = {loader.idx2word, loader.word2idx, loader.idx2char, loader.char2idx}
-	checkpoint.lr = lr
+	    checkpoint.lr = lr
         print('saving checkpoint to ' .. savefile)
         if epoch == opt.max_epochs or epoch % opt.save_every == 0 then
             torch.save(savefile, checkpoint)

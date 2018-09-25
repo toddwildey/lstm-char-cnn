@@ -30,5 +30,4 @@ th main.lua -data_dir data/de -savefile de-char-small -rnn_size 300 -use_chars 1
 th main.lua -data_dir data/de -savefile de-word-large -rnn_size 650 -use_chars 0 
 -use_words 1 -word_vec_size 650 -highway_layers 0 -EOS ''
 #LSTM-CharCNN-Large
-th main.lua -data_dir data/de -savefile de-char-large -rnn_size 650 -use_chars 1 -use_words 0 
--char_vec_size 15 -highway_layers 2 -kernels '{1,2,3,4,5,6,7}' -feature_maps '{50,100,150,200,200,200,200}' -EOS ''
+th main.lua -data_dir data/de -savefile de-char-large -rnn_size 650 -use_chars 1 -use_words 0 -char_vec_size 15 -highway_layers 2 -kernels '{1,2,3,4,5,6,7}' -feature_maps '{50,100,150,200,200,200,200}' -EOS ''

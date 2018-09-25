@@ -40,7 +40,7 @@ function BatchLoaderUnk.create(data_dir, batch_size, seq_length, max_word_l)
     self.seq_length = seq_length
     self.split_sizes = {}
     self.all_batches = {}
-    print('reshaping tensors...')  
+    print('reshaping tensors...')
     local x_batches, y_batches, nbatches
     for split, data in ipairs(all_data) do
        local len = data:size(1)

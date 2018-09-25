@@ -11,6 +11,9 @@ function TDNN.tdnn(length, input_size, feature_maps, kernels)
     local layer1_concat, output
     local input = nn.Identity()() --input is batch_size x length x input_size
     
+    -- print('input_size')
+    -- print(input_size)
+
     local layer1 = {}
     for i = 1, #kernels do
        local reduced_l = length - kernels[i] + 1 
@@ -19,8 +22,11 @@ function TDNN.tdnn(length, input_size, feature_maps, kernels)
           -- Use CuDNN for temporal convolution.
           if not cudnn then require 'cudnn' end
           -- Fake the spatial convolution.
-          local conv = cudnn.SpatialConvolution(1, feature_maps[i], input_size,
-                                                kernels[i], 1, 1, 0)
+          local conv = cudnn.SpatialConvolution(1, feature_maps[i], input_size, kernels[i], 1, 1, 0)
+          -- print('feature_maps[i]')
+          -- print(feature_maps[i])
+          -- print('kernels[i]')
+          -- print(kernels[i])
           conv.name = 'conv_filter_' .. kernels[i] .. '_' .. feature_maps[i]
           local conv_layer = conv(nn.View(1, -1, input_size):setNumInputDims(2)(input))
           --pool_layer = nn.Max(3)(nn.Max(3)(nn.Tanh()(conv_layer)))

@@ -4,3 +4,12 @@
 *.txt
 *.zip
 *.tsv
+cs-en/
+en-cs/
+en-de/
+en-es/
+en-fr/
+en-ru/
+
+icml14-data.readme
+icml14-data.tar.bz2

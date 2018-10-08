@@ -123,11 +123,13 @@ if opt.hsm > 0 then
         else
             n_in_cluster[c] = n_in_cluster[c] + 1
         end
+
         mapping[word_idx][1] = c
         mapping[word_idx][2] = n_in_cluster[c]        
         if n_in_cluster[c] >= n_in_each_cluster then
             c = c+1
         end
+
         if c > opt.hsm then --take care of some corner cases
             c = opt.hsm
         end
@@ -244,54 +246,54 @@ function eval_split(split_idx, max_batches)
     local loss = 0
     local rnn_state = {[0] = init_state}    
     if split_idx<=2 then -- batch eval        
-	for i = 1,n do -- iterate over batches in the split
-	    -- fetch a batch
-	    local x, y, x_char = loader:next_batch(split_idx)
+    	for i = 1,n do -- iterate over batches in the split
+    	    -- fetch a batch
+    	    local x, y, x_char = loader:next_batch(split_idx)
 
-	    if opt.gpuid >= 0 then -- ship the input arrays to GPU
-    		-- have to convert to float because integers can't be cuda()'d
-    		x = x:float():cuda()
-    		y = y:float():cuda()
-    		x_char = x_char:float():cuda()
-	    end
+    	    if opt.gpuid >= 0 then -- ship the input arrays to GPU
+        		-- have to convert to float because integers can't be cuda()'d
+        		x = x:float():cuda()
+        		y = y:float():cuda()
+        		x_char = x_char:float():cuda()
+    	    end
 
-	    -- forward pass
-	    for t=1,opt.seq_length do
-		clones.rnn[t]:evaluate() -- for dropout proper functioning
-		local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
-		rnn_state[t] = {}
-		for i=1,#init_state do 
-            table.insert(rnn_state[t], lst[i])
-        end
-		prediction = lst[#lst]
-        loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
-	    end
-	    -- carry over lstm state
-	    rnn_state[0] = rnn_state[#rnn_state]
-	end
-	loss = loss / opt.seq_length / n
+    	    -- forward pass
+    	    for t=1,opt.seq_length do
+    		clones.rnn[t]:evaluate() -- for dropout proper functioning
+    		local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
+    		rnn_state[t] = {}
+    		for i=1,#init_state do 
+                table.insert(rnn_state[t], lst[i])
+            end
+    		prediction = lst[#lst]
+            loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
+    	    end
+    	    -- carry over lstm state
+    	    rnn_state[0] = rnn_state[#rnn_state]
+    	end
+    	loss = loss / opt.seq_length / n
     else -- full eval on test set
         local token_perp = torch.zeros(#loader.idx2word, 2) 
         local x, y, x_char = loader:next_batch(split_idx)
-	if opt.gpuid >= 0 then -- ship the input arrays to GPU
-	    -- have to convert to float because integers can't be cuda()'d
-	    x = x:float():cuda()
-	    y = y:float():cuda()
-	    x_char = x_char:float():cuda()
-	end
-	protos.rnn:evaluate() -- just need one clone
-	for t = 1, x:size(2) do
-	    local lst = protos.rnn:forward(get_input(x, x_char, t, rnn_state[0]))
-	    rnn_state[0] = {}
-	    for i=1,#init_state do table.insert(rnn_state[0], lst[i]) end
-	    prediction = lst[#lst] 
+    	if opt.gpuid >= 0 then -- ship the input arrays to GPU
+    	    -- have to convert to float because integers can't be cuda()'d
+    	    x = x:float():cuda()
+    	    y = y:float():cuda()
+    	    x_char = x_char:float():cuda()
+    	end
+    	protos.rnn:evaluate() -- just need one clone
+    	for t = 1, x:size(2) do
+    	    local lst = protos.rnn:forward(get_input(x, x_char, t, rnn_state[0]))
+    	    rnn_state[0] = {}
+    	    for i=1,#init_state do table.insert(rnn_state[0], lst[i]) end
+    	    prediction = lst[#lst] 
             local tok_perp
             tok_perp = protos.criterion:forward(prediction, y[{{},t}])
             loss = loss + tok_perp
             token_perp[y[1][t]][1] = token_perp[y[1][t]][1] + 1 --count
             token_perp[y[1][t]][2] = token_perp[y[1][t]][2] + tok_perp
-	end
-	loss = loss / x:size(2)
+    	end
+    	loss = loss / x:size(2)
     end
     -- local perp = torch.exp(loss)
     local perp = loss

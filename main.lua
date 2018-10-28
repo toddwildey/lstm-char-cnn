@@ -54,7 +54,7 @@ cmd:option('-max_word_l',65,'maximum word length')
 
 -- bookkeeping
 cmd:option('-seed',3435,'torch manual random number generator seed')
-cmd:option('-print_every',500,'how many steps/minibatches between printing out the loss')
+cmd:option('-print_every', 10,'how many steps/minibatches between printing out the loss')
 cmd:option('-save_every', 5, 'save every n epochs')
 cmd:option('-checkpoint_dir', 'cv', 'output directory where checkpoints get written')
 cmd:option('-savefile','char','filename to autosave the checkpont to. Will be inside checkpoint_dir/')
@@ -244,6 +244,8 @@ function get_input(x, x_char, t, prev_states)
     if opt.use_chars == 1 then
         -- table.insert(u, x_char[{{},t}]) 
         local subX = x_char[{{}, t}]
+        -- print('x_char:size()')
+        -- print(x_char:size())
         -- print('subX')
         -- print(subX)
         table.insert(u, subX)
@@ -353,17 +355,17 @@ function feval(x)
         clones.rnn[t]:training() -- make sure we are in correct mode (this is cheap, sets flag)        
         local rnnInput = get_input(x, x_char, t, rnn_state[t-1])
         -- print('rnnInput')
-        -- print(rnnInput)
+        -- print(rnnInput[1])
         local lst = clones.rnn[t]:forward(rnnInput)
         rnn_state[t] = {}
-        for i=1,#init_state do 
+        for i=1,#init_state do
             table.insert(rnn_state[t], lst[i]) 
         end -- extract the state, without output
-        -- print('lst[#lst]')
-        -- print(lst[#lst]:size())
-        -- print('y[{{}, t}]')
-        -- print(y[{{}, t}]:size())
         predictions[t] = lst[#lst] -- last element is the prediction
+        -- print('predictions[t]')
+        -- print(predictions[t])
+        -- print('y[{{}, t}]')
+        -- print(y[{{}, t}])
         loss = loss + clones.criterion[t]:forward(predictions[t], y[{{}, t}])
     end
     loss = loss / opt.seq_length
@@ -377,7 +379,7 @@ function feval(x)
 	    table.insert(rnn_state[t-1], drnn_state[t])
         local dlst = clones.rnn[t]:backward(get_input(x, x_char, t, rnn_state[t-1]), drnn_state[t])
         drnn_state[t-1] = {}
-	local tmp = opt.use_words + opt.use_chars -- not the safest way but quick
+	    local tmp = opt.use_words + opt.use_chars -- not the safest way but quick
         for k,v in pairs(dlst) do
             if k > tmp then -- k == 1 is gradient on x, which we dont need
                 -- note we do k-1 because first item is dembeddings, and then follow the 
@@ -414,7 +416,6 @@ function feval(x)
 
     return torch.exp(loss)
 end
-
 
 -- start optimization here
 train_losses = {}
@@ -461,7 +462,7 @@ for i = 1, iterations do
     if i % loader.split_sizes[1] == 0 and #val_losses > 2 then
         if val_losses[#val_losses-1] - val_losses[#val_losses] < opt.decay_when then
             lr = lr * opt.learning_rate_decay
-	end
+	    end
     end    
 
     if i % opt.print_every == 0 then

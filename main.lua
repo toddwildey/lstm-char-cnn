@@ -23,8 +23,10 @@ cmd:text()
 cmd:text('Train a word+character-level language model')
 cmd:text()
 cmd:text('Options')
+
 -- data
 cmd:option('-data_dir','data/ptb','data directory. Should contain train.txt/valid.txt/test.txt with input data')
+
 -- model params
 cmd:option('-rnn_size', 650, 'size of LSTM internal state')
 cmd:option('-use_words', 0, 'use words (1=yes)')
@@ -36,6 +38,7 @@ cmd:option('-feature_maps', '{50,100,150,200,200,200,200}', 'number of feature m
 cmd:option('-kernels', '{1,2,3,4,5,6,7}', 'conv net kernel widths')
 cmd:option('-num_layers', 2, 'number of layers in the LSTM')
 cmd:option('-dropout',0.5,'dropout. 0 = no dropout')
+
 -- optimization
 cmd:option('-hsm',0,'number of clusters to use for hsm. 0 = normal softmax, -1 = use sqrt(|V|)')
 cmd:option('-learning_rate',1,'starting learning rate')
@@ -48,6 +51,7 @@ cmd:option('-batch_size',20,'number of sequences to train on in parallel')
 cmd:option('-max_epochs',25,'number of full passes through the training data')
 cmd:option('-max_grad_norm',5,'normalize gradients at')
 cmd:option('-max_word_l',65,'maximum word length')
+
 -- bookkeeping
 cmd:option('-seed',3435,'torch manual random number generator seed')
 cmd:option('-print_every',500,'how many steps/minibatches between printing out the loss')
@@ -56,6 +60,7 @@ cmd:option('-checkpoint_dir', 'cv', 'output directory where checkpoints get writ
 cmd:option('-savefile','char','filename to autosave the checkpont to. Will be inside checkpoint_dir/')
 cmd:option('-EOS', '+', '<EOS> symbol. should be a single unused character (like +) for PTB and blank for others')
 cmd:option('-time', 0, 'print batch times')
+
 -- GPU/CPU
 cmd:option('-gpuid', -1,'which gpu to use. -1 = use CPU')
 cmd:option('-cudnn', 0,'use cudnn (1=yes). this should greatly speed up convolutions')
@@ -111,13 +116,16 @@ if opt.hsm > 0 then
     -- we want roughly equal number of words in each cluster
     HSMClass = require 'util.HSMClass'
     require 'util.HLogSoftMax'
+
     mapping = torch.LongTensor(#loader.idx2word, 2):zero()
     local n_in_each_cluster = #loader.idx2word / opt.hsm
-    local _, idx = torch.sort(torch.randn(#loader.idx2word), 1, true)   
+    local _, idx = torch.sort(torch.randn(#loader.idx2word), 1, true)
+
     local n_in_cluster = {} --number of tokens in each cluster
     local c = 1
     for i = 1, idx:size(1) do
-        local word_idx = idx[i] 
+        local word_idx = idx[i]
+
         if n_in_cluster[c] == nil then
             n_in_cluster[c] = 1
         else
@@ -125,7 +133,8 @@ if opt.hsm > 0 then
         end
 
         mapping[word_idx][1] = c
-        mapping[word_idx][2] = n_in_cluster[c]        
+        mapping[word_idx][2] = n_in_cluster[c]
+
         if n_in_cluster[c] >= n_in_each_cluster then
             c = c+1
         end
@@ -134,6 +143,7 @@ if opt.hsm > 0 then
             c = opt.hsm
         end
     end
+
     print(string.format('using hierarchical softmax with %d classes', opt.hsm))
 end
 
@@ -144,15 +154,31 @@ LSTMTDNN = require 'model.LSTMTDNN'
 HighwayMLP = require 'model.HighwayMLP'
 
 -- make sure output directory exists
-if not path.exists(opt.checkpoint_dir) then lfs.mkdir(opt.checkpoint_dir) end
+if not path.exists(opt.checkpoint_dir) then
+    lfs.mkdir(opt.checkpoint_dir)
+end
 
 -- define the model: prototypes for one timestep, then clone them in time
 protos = {}
 print('creating an LSTM-CNN with ' .. opt.num_layers .. ' layers')
-protos.rnn = LSTMTDNN.lstmtdnn(opt.rnn_size, opt.num_layers, opt.dropout, #loader.idx2word, 
-    opt.word_vec_size, #loader.idx2char, opt.char_vec_size, opt.feature_maps, 
-    opt.kernels, loader.max_word_l, opt.use_words, opt.use_chars, 
-    opt.batch_norm,opt.highway_layers, opt.hsm)
+protos.rnn = LSTMTDNN.lstmtdnn(
+    opt.rnn_size,
+    opt.num_layers,
+    opt.dropout,
+    #loader.idx2word,
+    opt.word_vec_size,
+    #loader.idx2char,
+    opt.char_vec_size,
+    opt.feature_maps,
+    opt.kernels,
+    loader.max_word_l,
+    opt.use_words,
+    opt.use_chars,
+    opt.batch_norm,
+    opt.highway_layers,
+    opt.hsm
+)
+
 -- training criterion (negative log likelihood)
 if opt.hsm > 0 then
     protos.criterion = nn.HLogSoftMax(mapping, opt.rnn_size)
@@ -245,7 +271,7 @@ function eval_split(split_idx, max_batches)
     loader:reset_batch_pointer(split_idx) -- move batch iteration pointer for this split to front
     local loss = 0
     local rnn_state = {[0] = init_state}    
-    if split_idx<=2 then -- batch eval        
+    if split_idx <= 2 then -- batch eval        
     	for i = 1,n do -- iterate over batches in the split
     	    -- fetch a batch
     	    local x, y, x_char = loader:next_batch(split_idx)
@@ -259,14 +285,14 @@ function eval_split(split_idx, max_batches)
 
     	    -- forward pass
     	    for t=1,opt.seq_length do
-    		clones.rnn[t]:evaluate() -- for dropout proper functioning
-    		local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
-    		rnn_state[t] = {}
-    		for i=1,#init_state do 
-                table.insert(rnn_state[t], lst[i])
-            end
-    		prediction = lst[#lst]
-            loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
+        		clones.rnn[t]:evaluate() -- for dropout proper functioning
+        		local lst = clones.rnn[t]:forward(get_input(x, x_char, t, rnn_state[t-1]))
+        		rnn_state[t] = {}
+        		for i=1,#init_state do 
+                    table.insert(rnn_state[t], lst[i])
+                end
+        		prediction = lst[#lst]
+                loss = loss + clones.criterion[t]:forward(prediction, y[{{}, t}])
     	    end
     	    -- carry over lstm state
     	    rnn_state[0] = rnn_state[#rnn_state]
@@ -364,7 +390,7 @@ function feval(x)
     ------------------------ misc ----------------------
     -- transfer final state to initial state (BPTT)
     init_state_global = rnn_state[#rnn_state] -- NOTE: I don't think this needs to be a clone, right?
-    
+
     -- renormalize gradients
     local grad_norm, shrink_factor
     if opt.hsm==0 then
@@ -372,17 +398,20 @@ function feval(x)
     else
         grad_norm = torch.sqrt(grad_params:norm()^2 + hsm_grad_params:norm()^2)
     end
+
     if grad_norm > opt.max_grad_norm then
         shrink_factor = opt.max_grad_norm / grad_norm
         grad_params:mul(shrink_factor)
         if opt.hsm > 0 then
             hsm_grad_params:mul(shrink_factor)
         end
-    end    
+    end
+
     params:add(grad_params:mul(-lr)) -- update params
     if opt.hsm > 0 then
         hsm_params:add(hsm_grad_params:mul(-lr))
     end
+
     return torch.exp(loss)
 end
 

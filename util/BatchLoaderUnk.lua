@@ -117,27 +117,26 @@ function BatchLoaderUnk.text_to_tensor(input_files, out_vocabfile, out_tensorfil
        local counts = 0
        for line in f:lines() do
           line = stringx.replace(line, '<unk>', tokens.UNK) -- replace unk with a single character
-	  line = stringx.replace(line, tokens.START, '') --start-of-word token is reserved
-	  line = stringx.replace(line, tokens.END, '') --end-of-word token is reserved
+          line = stringx.replace(line, tokens.START, '') --start-of-word token is reserved
+          line = stringx.replace(line, tokens.END, '') --end-of-word token is reserved
           for word in line:gmatch'([^%s]+)' do
-	     max_word_l_tmp = math.max(max_word_l_tmp, utf8.len(word) + 2) -- add 2 for start/end chars
-	     counts = counts + 1
+            max_word_l_tmp = math.max(max_word_l_tmp, utf8.len(word) + 2) -- add 2 for start/end chars
+            counts = counts + 1
           end
-	  if tokens.EOS ~= '' then
-	      counts = counts + 1 --PTB uses \n for <eos>, so need to add one more token at the end
-	  end
+          if tokens.EOS ~= '' then
+              counts = counts + 1 --PTB uses \n for <eos>, so need to add one more token at the end
+          end
        end
        f:close()
        split_counts[split] = counts
     end
       
     print('After first pass of data, max word length is: ' .. max_word_l_tmp)
-    print(string.format('Token count: train %d, val %d, test %d', 
-    			split_counts[1], split_counts[2], split_counts[3]))
+    print(string.format('Token count: train %d, val %d, test %d', split_counts[1], split_counts[2], split_counts[3]))
 
     -- if actual max word length is less than the limit, use that
     max_word_l = math.min(max_word_l_tmp, max_word_l)
-   
+
     for	split = 1,3 do -- split = 1 (train), 2 (val), or 3 (test)     
        -- Preallocate the tensors we will need.
        -- Watch out the second one needs a lot of RAM.
@@ -148,8 +147,8 @@ function BatchLoaderUnk.text_to_tensor(input_files, out_vocabfile, out_tensorfil
        local word_num = 0
        for line in f:lines() do
           line = stringx.replace(line, '<unk>', tokens.UNK)
-	  line = stringx.replace(line, tokens.START, '') -- start and end of word tokens are reserved
-	  line = stringx.replace(line, tokens.END, '')
+          line = stringx.replace(line, tokens.START, '') -- start and end of word tokens are reserved
+          line = stringx.replace(line, tokens.END, '')
           for rword in line:gmatch'([^%s]+)' do
              function append(word)
                 word_num = word_num + 1
@@ -157,39 +156,43 @@ function BatchLoaderUnk.text_to_tensor(input_files, out_vocabfile, out_tensorfil
                 if word_num % 10000 == 0 then
                    collectgarbage()
                 end
+
                 local chars = {char2idx[tokens.START]} -- start-of-word symbol
                 if string.sub(word,1,1) == tokens.UNK and word:len() > 1 then -- unk token with character info available
                    word = string.sub(word, 3)
                    output_tensors[split][word_num] = word2idx[tokens.UNK]
                 else
-                   if word2idx[word]==nil then
-                      idx2word[#idx2word + 1] = word -- create word-idx/idx-word mappings
-                      word2idx[word] = #idx2word
-                   end
-                   output_tensors[split][word_num] = word2idx[word]
+                  if word2idx[word]==nil then
+                    idx2word[#idx2word + 1] = word -- create word-idx/idx-word mappings
+                    word2idx[word] = #idx2word
+                  end
+                  output_tensors[split][word_num] = word2idx[word]
                 end
+
                 local l = utf8.len(word)
                 for _, char in utf8.next, word do
-                   char = utf8.char(char) -- save as actual characters
-                   if char2idx[char]==nil then
-                      idx2char[#idx2char + 1] = char -- create char-idx/idx-char mappings
-                      char2idx[char] = #idx2char
-                   end
-                   chars[#chars + 1] = char2idx[char]
+                  char = utf8.char(char) -- save as actual characters
+                  if char2idx[char]==nil then
+                    idx2char[#idx2char + 1] = char -- create char-idx/idx-char mappings
+                    char2idx[char] = #idx2char
+                  end
+                  chars[#chars + 1] = char2idx[char]
                 end
+
                 chars[#chars + 1] = char2idx[tokens.END] -- end-of-word symbol
                 for i = 1, math.min(#chars, max_word_l) do
-                   output_chars[split][word_num][i] = chars[i]
+                  output_chars[split][word_num][i] = chars[i]
                 end
+
                 if #chars == max_word_l then
-                    chars[#chars] = char2idx[tokens.END]
+                  chars[#chars] = char2idx[tokens.END]
                 end
              end
              append(rword)
           end
-	  if tokens.EOS ~= '' then --PTB does not have <eos> so we add a character for <eos> tokens
-              append(tokens.EOS)   --other datasets don't need this
-	  end
+          if tokens.EOS ~= '' then --PTB does not have <eos> so we add a character for <eos> tokens
+            append(tokens.EOS)   --other datasets don't need this
+          end
        end
     end
     print "done"

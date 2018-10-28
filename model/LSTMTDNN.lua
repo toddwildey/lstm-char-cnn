@@ -54,35 +54,42 @@ function LSTMTDNN.lstmtdnn(
         -- the input to this layer
         if L == 1 then
             if use_chars == 1 then
-            char_vec = char_vec_layer(inputs[1])
-            local char_cnn = TDNN.tdnn(length, char_vec_size, feature_maps, kernels)
-            char_cnn.name = 'cnn' -- change name so we can refer to it later
-            local cnn_output = char_cnn(char_vec)
-            input_size_L = torch.Tensor(feature_maps):sum()
+                char_vec = char_vec_layer(inputs[1])
+                local char_cnn = TDNN.tdnn(length, char_vec_size, feature_maps, kernels)
+                char_cnn.name = 'cnn' -- change name so we can refer to it later
+                local cnn_output = char_cnn(char_vec)
+                input_size_L = torch.Tensor(feature_maps):sum()
+                
                 if use_words == 1 then
-                word_vec = word_vec_layer(inputs[2])
-                x = nn.JoinTable(2)({cnn_output, word_vec})
-                input_size_L = input_size_L + word_vec_size
-            else
-                x = nn.Identity()(cnn_output)
-            end
+                    word_vec = word_vec_layer(inputs[2])
+                    x = nn.JoinTable(2)({cnn_output, word_vec})
+                    input_size_L = input_size_L + word_vec_size
+                else
+                    x = nn.Identity()(cnn_output)
+                end
             else -- word_vecs only
                 x = word_vec_layer(inputs[1])
-            input_size_L = word_vec_size
+                input_size_L = word_vec_size
             end
+
             if batch_norm == 1 then 
                 x = nn.BatchNormalization(0)(x)
             end
+
             if highway_layers > 0 then
                 local highway_mlp = HighwayMLP.mlp(input_size_L, highway_layers)
-            highway_mlp.name = 'highway'
-            x = highway_mlp(x)
+                highway_mlp.name = 'highway'
+                x = highway_mlp(x)
             end
         else 
             x = outputs[(L-1)*2] -- prev_h
-            if dropout > 0 then x = nn.Dropout(dropout)(x) end -- apply dropout, if any
+            if dropout > 0 then
+                x = nn.Dropout(dropout)(x) -- apply dropout, if any
+            end
+
             input_size_L = rnn_size
         end
+
         -- evaluate the input sums at once for efficiency
         local i2h = nn.Linear(input_size_L, 4 * rnn_size)(x)
         local h2h = nn.Linear(rnn_size, 4 * rnn_size)(prev_h)
@@ -99,7 +106,8 @@ function LSTMTDNN.lstmtdnn(
         local next_c = nn.CAddTable()({
             nn.CMulTable()({forget_gate, prev_c}),
             nn.CMulTable()({in_gate, in_transform})
-          })
+        })
+
         -- gated cells form the output
         local next_h = nn.CMulTable()({out_gate, nn.Tanh()(next_c)})
 
@@ -122,6 +130,7 @@ function LSTMTDNN.lstmtdnn(
         local logsoft = nn.LogSoftMax()(proj)
         table.insert(outputs, logsoft)
     end
+
     return nn.gModule(inputs, outputs)
 end
 

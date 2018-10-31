@@ -172,8 +172,6 @@ protos.rnn = LSTMTDNN.lstmtdnn(
     opt.feature_maps,
     opt.kernels,
     loader.max_word_l,
-    opt.use_words,
-    opt.use_chars,
     opt.batch_norm,
     opt.highway_layers,
     opt.hsm

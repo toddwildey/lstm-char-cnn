@@ -47,6 +47,7 @@ function BatchLoaderUnk.create(data_dir, batch_size, seq_length, max_word_l)
        if len % (batch_size * seq_length) ~= 0 and split < 3 then
           data = data:sub(1, batch_size * seq_length * math.floor(len / (batch_size * seq_length)))
        end
+
        local ydata = data:clone()
        ydata:sub(1,-2):copy(data:sub(2,-1))
        ydata[-1] = data[1]
@@ -54,6 +55,7 @@ function BatchLoaderUnk.create(data_dir, batch_size, seq_length, max_word_l)
        for i = 1, data:size(1) do
           data_char[i] = all_data_char[split][i]
        end
+
        if split < 3 then
           x_batches = data:view(batch_size, -1):split(seq_length, 2)
           y_batches = ydata:view(batch_size, -1):split(seq_length, 2)
@@ -69,11 +71,19 @@ function BatchLoaderUnk.create(data_dir, batch_size, seq_length, max_word_l)
           x_char_batches = {data_char:expand(batch_size, data_char:size(2), data_char:size(3))}
           self.split_sizes[split] = 1	
        end
+
        self.all_batches[split] = {x_batches, y_batches, x_char_batches}
     end
+
     self.batch_idx = {0,0,0}
-    print(string.format('data load done. Number of batches in train: %d, val: %d, test: %d', 
-          self.split_sizes[1], self.split_sizes[2], self.split_sizes[3]))
+
+    print(string.format(
+          'data load done. Number of batches in train: %d, val: %d, test: %d', 
+          self.split_sizes[1],
+          self.split_sizes[2],
+          self.split_sizes[3]
+    ))
+
     collectgarbage()
     return self
 end
@@ -89,6 +99,7 @@ function BatchLoaderUnk:next_batch(split_idx)
     if self.batch_idx[split_idx] > self.split_sizes[split_idx] then
         self.batch_idx[split_idx] = 1 -- cycle around to beginning
     end
+
     -- pull out the correct next batch
     local idx = self.batch_idx[split_idx]
     return self.all_batches[split_idx][1][idx], self.all_batches[split_idx][2][idx], self.all_batches[split_idx][3][idx]

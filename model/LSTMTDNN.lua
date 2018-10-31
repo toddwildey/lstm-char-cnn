@@ -13,9 +13,7 @@ function LSTMTDNN.lstmtdnn(
         char_vec_size,      -- char_vec_size = dimensionality of char embeddings
         feature_maps,       -- feature_maps = table of feature map sizes for each kernel width
         kernels,            -- kernels = table of kernel widths
-        length,             -- length = max length of a word
-        use_words,          -- use_words = 1 if use word embeddings, otherwise not
-        use_chars,          -- use_chars = 1 if use char embeddings, otherwise not
+        max_word_l,         -- max_word_l = max length of a word
         batch_norm,         -- batch_norm = 1 if batches should be normalized
         highway_layers,     -- highway_layers = number of highway layers to use, if any
         hsm                 -- hsm = # of hierarchical softmax layers
@@ -28,17 +26,21 @@ function LSTMTDNN.lstmtdnn(
     local highway_layers = highway_layers or 0
     local inputs = {}
 
-    if use_chars == 1 then
-        table.insert(inputs, nn.Identity()()) -- batch_size x word length (char indices)
-        char_vec_layer = LookupTable(char_vocab_size, char_vec_size)
-        char_vec_layer.name = 'char_vecs' -- change name so we can refer to it easily later
-    end
+    table.insert(inputs, nn.Identity()()) -- batch_size x word length (char indices)
+    char_vec_layer = LookupTable(char_vocab_size, char_vec_size)
+    char_vec_layer.name = 'char_vecs' -- change name so we can refer to it easily later
 
-    if use_words == 1 then
-        table.insert(inputs, nn.Identity()()) -- batch_size x 1 (word indices)
-        word_vec_layer = LookupTable(word_vocab_size, word_vec_size)
-        word_vec_layer.name = 'word_vecs' -- change name so we can refer to it easily later
-    end
+    -- if use_chars == 1 then
+    --     table.insert(inputs, nn.Identity()()) -- batch_size x word length (char indices)
+    --     char_vec_layer = LookupTable(char_vocab_size, char_vec_size)
+    --     char_vec_layer.name = 'char_vecs' -- change name so we can refer to it easily later
+    -- end
+
+    -- if use_words == 1 then
+    --     table.insert(inputs, nn.Identity()()) -- batch_size x 1 (word indices)
+    --     word_vec_layer = LookupTable(word_vocab_size, word_vec_size)
+    --     word_vec_layer.name = 'word_vecs' -- change name so we can refer to it easily later
+    -- end
 
     for L = 1,n do
         table.insert(inputs, nn.Identity()()) -- prev_c[L]
@@ -48,29 +50,40 @@ function LSTMTDNN.lstmtdnn(
     local outputs = {}
     for L = 1,n do
         -- c,h from previous timesteps. offsets depend on if we are using both word/chars
-        local prev_h = inputs[2 * L + use_words + use_chars]
-        local prev_c = inputs[2 * L + use_words + use_chars - 1]
+        -- local prev_h = inputs[2 * L + use_words + use_chars]
+        -- local prev_c = inputs[2 * L + use_words + use_chars - 1]
+        local prev_h = inputs[2 * L + 1]
+        local prev_c = inputs[2 * L]
 
         -- the input to this layer
         if L == 1 then
-            if use_chars == 1 then
-                char_vec = char_vec_layer(inputs[1])
-                local char_cnn = TDNN.tdnn(length, char_vec_size, feature_maps, kernels)
-                char_cnn.name = 'cnn' -- change name so we can refer to it later
-                local cnn_output = char_cnn(char_vec)
-                input_size_L = torch.Tensor(feature_maps):sum()
+            char_vec = char_vec_layer(inputs[1])
+            local char_cnn = TDNN.tdnn(max_word_l, char_vec_size, feature_maps, kernels)
+            char_cnn.name = 'cnn' -- change name so we can refer to it later
+
+            local cnn_output = char_cnn(char_vec)
+            input_size_L = torch.Tensor(feature_maps):sum()
+            
+            x = nn.Identity()(cnn_output)
+
+            -- if use_chars == 1 then
+            --     char_vec = char_vec_layer(inputs[1])
+            --     local char_cnn = TDNN.tdnn(max_word_l, char_vec_size, feature_maps, kernels)
+            --     char_cnn.name = 'cnn' -- change name so we can refer to it later
+            --     local cnn_output = char_cnn(char_vec)
+            --     input_size_L = torch.Tensor(feature_maps):sum()
                 
-                if use_words == 1 then
-                    word_vec = word_vec_layer(inputs[2])
-                    x = nn.JoinTable(2)({cnn_output, word_vec})
-                    input_size_L = input_size_L + word_vec_size
-                else
-                    x = nn.Identity()(cnn_output)
-                end
-            else -- word_vecs only
-                x = word_vec_layer(inputs[1])
-                input_size_L = word_vec_size
-            end
+            --     if use_words == 1 then
+            --         word_vec = word_vec_layer(inputs[2])
+            --         x = nn.JoinTable(2)({cnn_output, word_vec})
+            --         input_size_L = input_size_L + word_vec_size
+            --     else
+            --         x = nn.Identity()(cnn_output)
+            --     end
+            -- else -- word_vecs only
+            --     x = word_vec_layer(inputs[1])
+            --     input_size_L = word_vec_size
+            -- end
 
             if batch_norm == 1 then 
                 x = nn.BatchNormalization(0)(x)
